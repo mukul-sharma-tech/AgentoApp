@@ -1,4 +1,4 @@
-const { app, BrowserWindow, shell } = require("electron");
+const { app, BrowserWindow, shell, dialog } = require("electron");
 const { spawn } = require("child_process");
 const path = require("path");
 const http = require("http");
@@ -8,16 +8,18 @@ const PORT = 3000;
 let nextProcess = null;
 let mainWindow = null;
 
-// ── Load .env.local into process.env ─────────────────────────────────────────
-function loadEnv() {
-  // In packaged app, .env.local sits next to the exe in resources
-  // In dev (electron:dev), it's at the project root
-  const candidates = [
-    path.join(process.resourcesPath ?? "", ".env.local"),
-    path.join(__dirname, "../.env.local"),
-    path.join(process.cwd(), ".env.local"),
-  ];
+// ── Resolve paths correctly in both dev and packaged mode ────────────────────
+const isPackaged = app.isPackaged;
+const appRoot = isPackaged
+  ? path.join(process.resourcesPath, "app")
+  : path.join(__dirname, "..");
 
+// ── Load .env.local (dev mode only — in prod, vars are baked into the build) ─
+function loadEnv() {
+  const candidates = [
+    path.join(appRoot, ".env.local"),
+    path.join(__dirname, "../.env.local"),
+  ];
   for (const envPath of candidates) {
     if (fs.existsSync(envPath)) {
       const lines = fs.readFileSync(envPath, "utf-8").split("\n");
@@ -34,12 +36,22 @@ function loadEnv() {
       return;
     }
   }
-  console.warn("[Env] No .env.local found — env vars must be set externally");
+  console.log("[Env] No .env.local — using baked-in build env vars");
 }
 
 // ── Spawn Next.js standalone server ──────────────────────────────────────────
 function startNextServer() {
-  const serverPath = path.join(__dirname, "../.next/standalone/server.js");
+  const serverPath = isPackaged
+    ? path.join(process.resourcesPath, "app", ".next", "standalone", "server.js")
+    : path.join(__dirname, "../.next/standalone/server.js");
+
+  console.log("[Next] Starting server at:", serverPath);
+
+  if (!fs.existsSync(serverPath)) {
+    dialog.showErrorBox("Agento Error", `Server not found at:\n${serverPath}\n\nPlease reinstall the app.`);
+    app.quit();
+    return;
+  }
 
   nextProcess = spawn(process.execPath, [serverPath], {
     env: {
@@ -48,7 +60,6 @@ function startNextServer() {
       HOSTNAME: "127.0.0.1",
       NODE_ENV: "production",
       DEPLOYMENT_MODE: "desktop",
-      // Override so NextAuth sets cookies for localhost, not the cloud URL
       NEXTAUTH_URL: `http://127.0.0.1:${PORT}`,
     },
     stdio: "pipe",
@@ -56,25 +67,22 @@ function startNextServer() {
 
   nextProcess.stdout.on("data", (d) => console.log("[Next]", d.toString().trim()));
   nextProcess.stderr.on("data", (d) => console.error("[Next]", d.toString().trim()));
-
-  nextProcess.on("exit", (code) => {
-    console.log("[Next] exited with code", code);
-  });
+  nextProcess.on("exit", (code) => console.log("[Next] exited with code", code));
 }
 
 // ── Poll until Next.js is ready ───────────────────────────────────────────────
-function waitForServer(retries = 30) {
+function waitForServer(retries = 40) {
   return new Promise((resolve, reject) => {
     const attempt = (n) => {
       http
         .get(`http://127.0.0.1:${PORT}`, (res) => {
           if (res.statusCode < 500) resolve();
           else if (n > 0) setTimeout(() => attempt(n - 1), 1000);
-          else reject(new Error("Next.js server failed to start"));
+          else reject(new Error("Next.js server returned error status"));
         })
         .on("error", () => {
           if (n > 0) setTimeout(() => attempt(n - 1), 1000);
-          else reject(new Error("Next.js server not reachable"));
+          else reject(new Error("Next.js server not reachable after 40s"));
         });
     };
     attempt(retries);
@@ -89,7 +97,6 @@ function createWindow() {
     minWidth: 900,
     minHeight: 600,
     title: "Agento",
-    icon: path.join(__dirname, "../public/logo.png"),
     webPreferences: {
       preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
@@ -99,7 +106,6 @@ function createWindow() {
 
   mainWindow.loadURL(`http://127.0.0.1:${PORT}`);
 
-  // Open external links in the system browser, not Electron
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (!url.startsWith(`http://127.0.0.1:${PORT}`)) {
       shell.openExternal(url);
@@ -120,6 +126,7 @@ app.whenReady().then(async () => {
     createWindow();
   } catch (err) {
     console.error("Failed to start server:", err);
+    dialog.showErrorBox("Agento Error", `Failed to start the server:\n${err.message}\n\nMake sure no other app is using port ${PORT}.`);
     app.quit();
   }
 });

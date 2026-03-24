@@ -23,17 +23,16 @@
       "electron/**/*",
       ".next/standalone/**/*",
       ".next/static/**/*",
-      "public/**/*",
-      "node_modules/**/*"
+      "public/**/*"
     ],
     "extraResources": [
       {
         "from": ".next/static",
-        "to": ".next/static"
+        "to": "app/.next/static"
       },
       {
         "from": "public",
-        "to": "public"
+        "to": "app/public"
       }
     ],
     "win": {
