@@ -11,7 +11,7 @@ let mainWindow = null;
 // ── Resolve paths correctly in both dev and packaged mode ────────────────────
 const isPackaged = app.isPackaged;
 const appRoot = isPackaged
-  ? path.join(process.resourcesPath, "app")
+  ? path.join(process.resourcesPath, "standalone")
   : path.join(__dirname, "..");
 
 // ── Load .env.local (dev mode only — in prod, vars are baked into the build) ─
@@ -42,7 +42,7 @@ function loadEnv() {
 // ── Spawn Next.js standalone server ──────────────────────────────────────────
 function startNextServer() {
   const serverPath = isPackaged
-    ? path.join(process.resourcesPath, "app", ".next", "standalone", "server.js")
+    ? path.join(process.resourcesPath, "standalone", "server.js")
     : path.join(__dirname, "../.next/standalone/server.js");
 
   console.log("[Next] Starting server at:", serverPath);

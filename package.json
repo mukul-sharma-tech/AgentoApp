@@ -21,18 +21,20 @@
     },
     "files": [
       "electron/**/*",
-      ".next/standalone/**/*",
-      ".next/static/**/*",
-      "public/**/*"
+      ".next/standalone/**/*"
     ],
     "extraResources": [
       {
+        "from": ".next/standalone",
+        "to": "standalone"
+      },
+      {
         "from": ".next/static",
-        "to": "app/.next/static"
+        "to": "standalone/.next/static"
       },
       {
         "from": "public",
-        "to": "app/public"
+        "to": "standalone/public"
       }
     ],
     "win": {

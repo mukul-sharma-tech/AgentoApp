@@ -3,12 +3,29 @@ name: Build Electron App
 on:
   push:
     tags:
-      - "v*"          # triggers on version tags like v1.0.0
-  workflow_dispatch:  # allows manual trigger from GitHub UI
+      - "v*"
+  workflow_dispatch:
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: --win --x64
+            artifact: "dist/*.exe"
+            name: Windows
+          - os: macos-latest
+            platform: --mac
+            artifact: "dist/*.dmg"
+            name: macOS
+          - os: ubuntu-latest
+            platform: --linux
+            artifact: "dist/*.AppImage"
+            name: Linux
+
+    runs-on: ${{ matrix.os }}
+    name: Build ${{ matrix.name }}
 
     steps:
       - name: Checkout code
@@ -56,13 +73,13 @@ jobs:
         run: node electron/copy-static.js
 
       - name: Package Electron app
-        run: npx electron-builder --win --x64
+        run: npx electron-builder ${{ matrix.platform }}
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Upload installer
+      - name: Upload artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Agento-Windows-Installer
-          path: dist/*.exe
+          name: Agento-${{ matrix.name }}
+          path: ${{ matrix.artifact }}
           retention-days: 30
