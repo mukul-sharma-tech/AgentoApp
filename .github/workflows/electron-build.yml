@@ -7,39 +7,16 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    strategy:
-      matrix:
-        include:
-          - os: windows-latest
-            platform: --win --x64
-            artifact: "dist/*.exe"
-            name: Windows
-          - os: macos-latest
-            platform: --mac
-            artifact: "dist/*.dmg"
-            name: macOS
-          - os: ubuntu-latest
-            platform: --linux
-            artifact: "dist/*.AppImage"
-            name: Linux
-
-    runs-on: ${{ matrix.os }}
-    name: Build ${{ matrix.name }}
-
+  build-windows:
+    runs-on: windows-latest
+    name: Build Windows
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: "npm"
-
-      - name: Install dependencies
-        run: npm ci
-
+      - run: npm ci
       - name: Create .env.local
         shell: bash
         run: |
@@ -63,23 +40,64 @@ jobs:
           ADMIN_UPI_PHONE_NO=${{ secrets.ADMIN_UPI_PHONE_NO }}
           NEXT_PUBLIC_ADMIN_UPI_PHONE_NO=${{ secrets.ADMIN_UPI_PHONE_NO }}
           EOF
-
       - name: Build Next.js
         run: npx next build
         env:
           NODE_OPTIONS: "--max-old-space-size=6144"
-
-      - name: Copy static assets
-        run: node electron/copy-static.js
-
-      - name: Package Electron app
-        run: npx electron-builder ${{ matrix.platform }}
+      - run: node electron/copy-static.js
+      - name: Package
+        run: npx electron-builder --win --x64
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v4
         with:
-          name: Agento-${{ matrix.name }}
-          path: ${{ matrix.artifact }}
+          name: Agento-Windows
+          path: dist/*.exe
+          retention-days: 30
+
+  build-mac:
+    runs-on: macos-latest
+    name: Build macOS
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: "npm"
+      - run: npm ci
+      - name: Create .env.local
+        run: |
+          cat > .env.local << 'EOF'
+          MONGO_URI=${{ secrets.MONGO_URI }}
+          MONGO_URI_ADMIN=${{ secrets.MONGO_URI_ADMIN }}
+          MONGO_URI_LOCAL=mongodb://127.0.0.1:27017
+          NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
+          NEXTAUTH_URL=http://127.0.0.1:3000
+          EMAIL_HOST=${{ secrets.EMAIL_HOST }}
+          EMAIL_PORT=${{ secrets.EMAIL_PORT }}
+          EMAIL_FROM=${{ secrets.EMAIL_FROM }}
+          EMAIL_USER=${{ secrets.EMAIL_USER }}
+          EMAIL_PASS=${{ secrets.EMAIL_PASS }}
+          OLLAMA_EMBEDDING_MODEL=${{ secrets.OLLAMA_EMBEDDING_MODEL }}
+          Groq_API_1=${{ secrets.GROQ_API_1 }}
+          Groq_API_2=${{ secrets.GROQ_API_2 }}
+          Groq_API_3=${{ secrets.GROQ_API_3 }}
+          ADMIN_MAIL=${{ secrets.ADMIN_MAIL }}
+          NEXT_PUBLIC_ADMIN_MAIL=${{ secrets.ADMIN_MAIL }}
+          ADMIN_UPI_PHONE_NO=${{ secrets.ADMIN_UPI_PHONE_NO }}
+          NEXT_PUBLIC_ADMIN_UPI_PHONE_NO=${{ secrets.ADMIN_UPI_PHONE_NO }}
+          EOF
+      - name: Build Next.js
+        run: npx next build
+        env:
+          NODE_OPTIONS: "--max-old-space-size=6144"
+      - run: node electron/copy-static.js
+      - name: Package
+        run: npx electron-builder --mac
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Agento-macOS
+          path: dist/*.dmg
           retention-days: 30
